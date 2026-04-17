@@ -1,0 +1,775 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>CardVault – TCG Inventory</title>
+  <style>
+    /* ── Reset & Variables ── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0f1117;
+      --surface: #1a1d27;
+      --surface2: #22263a;
+      --border: #2e3250;
+      --text: #e8eaf6;
+      --text-muted: #8b90b8;
+      --accent: #7c6fe0;
+      --accent-hover: #9d92f5;
+      --mtg: #4da6ff;
+      --poke: #f5c842;
+      --ygo: #b06aff;
+      --danger: #ff5c77;
+      --success: #3ddc97;
+      --radius: 12px;
+      --shadow: 0 4px 24px rgba(0,0,0,0.4);
+      --transition: 0.22s ease;
+    }
+    [data-theme="light"] {
+      --bg: #f0f2fc;
+      --surface: #ffffff;
+      --surface2: #e8eaf6;
+      --border: #c5cadf;
+      --text: #1a1d27;
+      --text-muted: #5a6080;
+      --shadow: 0 4px 24px rgba(0,0,0,0.12);
+    }
+
+    body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; min-height: 100vh; transition: background var(--transition), color var(--transition); }
+
+    /* ── Scrollbar ── */
+    ::-webkit-scrollbar { width: 6px; } 
+    ::-webkit-scrollbar-track { background: var(--bg); }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 99px; }
+
+    /* ── Header ── */
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 0 24px;
+      height: 64px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      box-shadow: var(--shadow);
+    }
+    .logo { display: flex; align-items: center; gap: 10px; font-size: 1.4rem; font-weight: 800; letter-spacing: -0.5px; }
+    .logo-icon { font-size: 1.8rem; }
+    .logo span { background: linear-gradient(135deg, var(--accent), #e040fb); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    .header-actions { display: flex; align-items: center; gap: 10px; }
+    .icon-btn {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--text);
+      border-radius: 8px;
+      padding: 8px 14px;
+      cursor: pointer;
+      font-size: 0.85rem;
+      display: flex; align-items: center; gap: 6px;
+      transition: all var(--transition);
+    }
+    .icon-btn:hover { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+    /* ── Main Layout ── */
+    main { max-width: 1400px; margin: 0 auto; padding: 28px 20px; }
+
+    /* ── Add Card Panel ── */
+    .add-panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 24px;
+      margin-bottom: 28px;
+      box-shadow: var(--shadow);
+    }
+    .add-panel h2 { font-size: 1rem; font-weight: 700; margin-bottom: 16px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; }
+    .tcg-tabs { display: flex; gap: 8px; margin-bottom: 18px; flex-wrap: wrap; }
+    .tcg-tab {
+      padding: 8px 20px;
+      border-radius: 99px;
+      border: 2px solid var(--border);
+      background: transparent;
+      color: var(--text-muted);
+      cursor: pointer;
+      font-weight: 600;
+      font-size: 0.9rem;
+      transition: all var(--transition);
+    }
+    .tcg-tab[data-tcg="mtg"].active   { border-color: var(--mtg);  background: rgba(77,166,255,0.15); color: var(--mtg);  }
+    .tcg-tab[data-tcg="poke"].active  { border-color: var(--poke); background: rgba(245,200,66,0.15); color: var(--poke); }
+    .tcg-tab[data-tcg="ygo"].active   { border-color: var(--ygo);  background: rgba(176,106,255,0.15);color: var(--ygo);  }
+    .tcg-tab:not(.active):hover { border-color: var(--accent); color: var(--text); }
+
+    .search-row { display: flex; gap: 10px; flex-wrap: wrap; }
+    .search-input {
+      flex: 1;
+      min-width: 220px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      padding: 10px 14px;
+      font-size: 0.95rem;
+      outline: none;
+      transition: border-color var(--transition);
+    }
+    .search-input:focus { border-color: var(--accent); }
+    .search-input::placeholder { color: var(--text-muted); }
+    .btn {
+      padding: 10px 22px;
+      border-radius: 8px;
+      border: none;
+      cursor: pointer;
+      font-weight: 700;
+      font-size: 0.9rem;
+      display: flex; align-items: center; gap: 6px;
+      transition: all var(--transition);
+    }
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-primary:hover { background: var(--accent-hover); transform: translateY(-1px); }
+    .btn-secondary { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+    .btn-secondary:hover { border-color: var(--accent); color: var(--accent); }
+
+    /* ── Search Results ── */
+    #searchResults {
+      margin-top: 16px;
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+      gap: 12px;
+      max-height: 340px;
+      overflow-y: auto;
+    }
+    .result-card {
+      background: var(--surface2);
+      border: 2px solid var(--border);
+      border-radius: 10px;
+      padding: 10px;
+      cursor: pointer;
+      text-align: center;
+      transition: all var(--transition);
+      animation: fadeIn 0.2s ease;
+    }
+    .result-card:hover { border-color: var(--accent); transform: translateY(-3px); box-shadow: 0 8px 20px rgba(124,111,224,0.3); }
+    .result-card img { width: 100%; border-radius: 6px; aspect-ratio: 2.5/3.5; object-fit: cover; background: var(--border); }
+    .result-card .rc-name { font-size: 0.75rem; font-weight: 600; margin-top: 6px; line-height: 1.3; word-break: break-word; }
+    .result-card .rc-set  { font-size: 0.68rem; color: var(--text-muted); margin-top: 2px; }
+
+    /* ── Filters Bar ── */
+    .filters-bar {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    .filter-input {
+      flex: 1;
+      min-width: 180px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      padding: 9px 14px;
+      font-size: 0.9rem;
+      outline: none;
+      transition: border-color var(--transition);
+    }
+    .filter-input:focus { border-color: var(--accent); }
+    .filter-input::placeholder { color: var(--text-muted); }
+    select.filter-input option { background: var(--surface); }
+    .inv-count { margin-left: auto; color: var(--text-muted); font-size: 0.85rem; white-space: nowrap; }
+
+    /* ── Inventory Grid ── */
+    #inventory {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
+      gap: 16px;
+    }
+    .inv-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      cursor: pointer;
+      transition: all var(--transition);
+      animation: fadeIn 0.25s ease;
+      position: relative;
+    }
+    .inv-card:hover { transform: translateY(-4px); box-shadow: var(--shadow); border-color: var(--accent); }
+    .inv-card.mtg  { border-top: 3px solid var(--mtg);  }
+    .inv-card.poke { border-top: 3px solid var(--poke); }
+    .inv-card.ygo  { border-top: 3px solid var(--ygo);  }
+    .inv-card img {
+      width: 100%;
+      aspect-ratio: 2.5/3.5;
+      object-fit: cover;
+      display: block;
+      background: var(--surface2);
+    }
+    .inv-card-body { padding: 10px; }
+    .inv-card-name { font-weight: 700; font-size: 0.82rem; line-height: 1.3; margin-bottom: 3px; word-break: break-word; }
+    .inv-card-set  { font-size: 0.72rem; color: var(--text-muted); margin-bottom: 8px; }
+    .qty-row { display: flex; align-items: center; gap: 6px; }
+    .qty-btn {
+      width: 26px; height: 26px;
+      border-radius: 50%;
+      border: 1px solid var(--border);
+      background: var(--surface2);
+      color: var(--text);
+      cursor: pointer;
+      font-size: 1rem;
+      line-height: 1;
+      display: flex; align-items: center; justify-content: center;
+      transition: all var(--transition);
+      flex-shrink: 0;
+    }
+    .qty-btn:hover { background: var(--accent); border-color: var(--accent); color: #fff; }
+    .qty-num { font-weight: 800; font-size: 0.95rem; flex: 1; text-align: center; }
+    .qty-badge {
+      position: absolute;
+      top: 8px; right: 8px;
+      background: var(--accent);
+      color: #fff;
+      font-weight: 800;
+      font-size: 0.78rem;
+      padding: 2px 8px;
+      border-radius: 99px;
+      min-width: 28px;
+      text-align: center;
+    }
+    .tcg-badge {
+      position: absolute;
+      top: 8px; left: 8px;
+      font-size: 0.65rem;
+      font-weight: 700;
+      padding: 2px 7px;
+      border-radius: 99px;
+      text-transform: uppercase;
+    }
+    .tcg-badge.mtg  { background: rgba(77,166,255,0.25); color: var(--mtg); }
+    .tcg-badge.poke { background: rgba(245,200,66,0.25); color: var(--poke); }
+    .tcg-badge.ygo  { background: rgba(176,106,255,0.25); color: var(--ygo); }
+
+    /* ── Empty State ── */
+    .empty-state {
+      grid-column: 1 / -1;
+      text-align: center;
+      padding: 60px 20px;
+      color: var(--text-muted);
+    }
+    .empty-state .empty-icon { font-size: 4rem; margin-bottom: 12px; }
+    .empty-state h3 { font-size: 1.2rem; margin-bottom: 8px; color: var(--text); }
+    .empty-state p  { font-size: 0.9rem; }
+
+    /* ── Modal ── */
+    .modal-overlay {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.7);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 200;
+      backdrop-filter: blur(4px);
+      animation: fadeIn 0.2s ease;
+    }
+    .modal {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      width: 90%;
+      max-width: 480px;
+      max-height: 90vh;
+      overflow-y: auto;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+      animation: slideUp 0.25s ease;
+    }
+    .modal-header {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 20px 24px 0;
+    }
+    .modal-header h3 { font-size: 1.15rem; }
+    .modal-close { background: none; border: none; color: var(--text-muted); font-size: 1.5rem; cursor: pointer; line-height: 1; }
+    .modal-close:hover { color: var(--danger); }
+    .modal-body { padding: 20px 24px 24px; }
+    .modal-img { width: 100%; max-width: 240px; margin: 0 auto 16px; display: block; border-radius: 10px; }
+    .modal-info { display: grid; gap: 8px; }
+    .modal-row { display: flex; justify-content: space-between; font-size: 0.88rem; padding: 8px 0; border-bottom: 1px solid var(--border); }
+    .modal-row:last-child { border-bottom: none; }
+    .modal-label { color: var(--text-muted); }
+    .modal-value { font-weight: 600; }
+    .modal-actions { display: flex; gap: 10px; margin-top: 18px; }
+    .btn-danger { background: rgba(255,92,119,0.15); color: var(--danger); border: 1px solid var(--danger); }
+    .btn-danger:hover { background: var(--danger); color: #fff; }
+
+    /* ── Notification ── */
+    .notif {
+      position: fixed;
+      bottom: 24px; right: 24px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-left: 4px solid var(--success);
+      border-radius: 10px;
+      padding: 14px 20px;
+      font-size: 0.9rem;
+      font-weight: 600;
+      z-index: 300;
+      box-shadow: var(--shadow);
+      animation: slideLeft 0.3s ease;
+      max-width: 320px;
+    }
+    .notif.error { border-left-color: var(--danger); }
+
+    /* ── Loading Spinner ── */
+    .spinner {
+      width: 36px; height: 36px;
+      border: 3px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      margin: 20px auto;
+    }
+
+    /* ── Animations ── */
+    @keyframes fadeIn  { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes slideUp { from { opacity: 0; transform: translateY(30px); } to { opacity: 1; transform: translateY(0); } }
+    @keyframes slideLeft { from { opacity: 0; transform: translateX(40px); } to { opacity: 1; transform: translateX(0); } }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Responsive ── */
+    @media (max-width: 600px) {
+      header { padding: 0 12px; }
+      main { padding: 16px 12px; }
+      .logo { font-size: 1.1rem; }
+      #inventory { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
+    }
+
+    /* ── Webcam Section ── */
+    #webcamContainer {
+      margin-top: 14px;
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+    }
+    #webcamContainer.active { display: flex; }
+    #webcamVideo { width: 100%; max-width: 360px; border-radius: 10px; border: 2px solid var(--border); }
+    #capturedCanvas { display: none; }
+  </style>
+</head>
+<body>
+
+<!-- ── HEADER ── -->
+<header>
+  <div class="logo">
+    <span class="logo-icon">🃏</span>
+    <span>CardVault</span>
+  </div>
+  <div class="header-actions">
+    <button class="icon-btn" onclick="exportCSV()">⬇ Export CSV</button>
+    <label class="icon-btn" style="cursor:pointer;">
+      ⬆ Import CSV
+      <input type="file" accept=".csv" style="display:none" onchange="importCSV(event)">
+    </label>
+    <button class="icon-btn" onclick="toggleTheme()" id="themeBtn">☀ Light</button>
+  </div>
+</header>
+
+<!-- ── MAIN ── -->
+<main>
+
+  <!-- Add Card Panel -->
+  <div class="add-panel">
+    <h2>➕ Add Cards</h2>
+
+    <!-- TCG Tabs -->
+    <div class="tcg-tabs">
+      <button class="tcg-tab active" data-tcg="mtg"  onclick="setTCG('mtg',this)">🔵 Magic: The Gathering</button>
+      <button class="tcg-tab"        data-tcg="poke" onclick="setTCG('poke',this)">🟡 Pokémon</button>
+      <button class="tcg-tab"        data-tcg="ygo"  onclick="setTCG('ygo',this)">🟣 Yu-Gi-Oh!</button>
+    </div>
+
+    <!-- Search Row -->
+    <div class="search-row">
+      <input id="cardSearch" class="search-input" type="text" placeholder="Search card by name…" onkeydown="if(event.key==='Enter')searchCards()">
+      <button class="btn btn-primary" onclick="searchCards()">🔍 Search</button>
+      <button class="btn btn-secondary" onclick="toggleWebcam()">📷 Webcam</button>
+      <label class="btn btn-secondary" style="cursor:pointer;">
+        🖼 Upload Image
+        <input type="file" accept="image/*" style="display:none" onchange="handleImageUpload(event)">
+      </label>
+    </div>
+
+    <!-- Webcam Container -->
+    <div id="webcamContainer">
+      <video id="webcamVideo" autoplay playsinline></video>
+      <canvas id="capturedCanvas"></canvas>
+      <div style="display:flex;gap:10px;">
+        <button class="btn btn-primary" onclick="captureFrame()">📸 Capture Frame</button>
+        <button class="btn btn-secondary" onclick="stopWebcam()">✖ Stop Camera</button>
+      </div>
+      <p style="font-size:0.8rem;color:var(--text-muted);">After capturing, type the card name above and search to add.</p>
+    </div>
+
+    <!-- Search Results -->
+    <div id="searchResults"></div>
+  </div>
+
+  <!-- Filters Bar -->
+  <div class="filters-bar">
+    <input class="filter-input" type="text" id="filterName" placeholder="🔎 Filter by name…" oninput="renderInventory()">
+    <select class="filter-input" id="filterTCG" onchange="renderInventory()" style="max-width:180px;">
+      <option value="">All TCGs</option>
+      <option value="mtg">Magic: The Gathering</option>
+      <option value="poke">Pokémon</option>
+      <option value="ygo">Yu-Gi-Oh!</option>
+    </select>
+    <select class="filter-input" id="filterSet" onchange="renderInventory()" style="max-width:200px;">
+      <option value="">All Sets</option>
+    </select>
+    <span class="inv-count" id="invCount">0 cards · 0 unique</span>
+  </div>
+
+  <!-- Inventory Grid -->
+  <div id="inventory"></div>
+
+</main>
+
+<!-- ── MODAL ── -->
+<div id="modalOverlay" class="modal-overlay" style="display:none" onclick="closeModal(event)">
+  <div class="modal" id="modal">
+    <div class="modal-header">
+      <h3 id="modalTitle">Card Details</h3>
+      <button class="modal-close" onclick="closeModalDirect()">✕</button>
+    </div>
+    <div class="modal-body">
+      <img id="modalImg" class="modal-img" src="" alt="">
+      <div class="modal-info" id="modalInfo"></div>
+      <div class="modal-actions">
+        <button class="btn btn-danger" onclick="deleteCard()">🗑 Remove Card</button>
+        <button class="btn btn-secondary" onclick="closeModalDirect()">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── State ──
+let currentTCG = 'mtg';
+let inventory  = JSON.parse(localStorage.getItem('cardvault_inv') || '[]');
+let modalCardId = null;
+let webcamStream = null;
+
+// ── TCG Selection ──
+function setTCG(tcg, btn) {
+  currentTCG = tcg;
+  document.querySelectorAll('.tcg-tab').forEach(t => t.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('searchResults').innerHTML = '';
+}
+
+// ── Save to localStorage ──
+function save() {
+  localStorage.setItem('cardvault_inv', JSON.stringify(inventory));
+}
+
+// ── Notify ──
+function notify(msg, type='success') {
+  const n = document.createElement('div');
+  n.className = 'notif' + (type === 'error' ? ' error' : '');
+  n.textContent = msg;
+  document.body.appendChild(n);
+  setTimeout(() => n.remove(), 3000);
+}
+
+// ── Search Cards ──
+async function searchCards() {
+  const q = document.getElementById('cardSearch').value.trim();
+  if (!q) return notify('Please enter a card name.', 'error');
+  const container = document.getElementById('searchResults');
+  container.innerHTML = '<div class="spinner"></div>';
+
+  try {
+    let cards = [];
+    if (currentTCG === 'mtg') {
+      const r = await fetch(`https://api.scryfall.com/cards/search?q=${encodeURIComponent(q)}&unique=cards&page=1`);
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.details || 'Not found');
+      cards = (d.data || []).slice(0, 18).map(c => ({
+        id: c.id,
+        name: c.name,
+        set: c.set_name,
+        type: c.type_line,
+        rarity: c.rarity,
+        image: c.image_uris ? c.image_uris.small : (c.card_faces ? c.card_faces[0].image_uris.small : ''),
+        tcg: 'mtg'
+      }));
+    } else if (currentTCG === 'poke') {
+      const r = await fetch(`https://api.pokemontcg.io/v2/cards?q=name:"${encodeURIComponent(q)}"&pageSize=18`);
+      const d = await r.json();
+      cards = (d.data || []).map(c => ({
+        id: c.id,
+        name: c.name,
+        set: c.set.name,
+        type: c.supertypes ? c.supertypes.join(', ') : '',
+        rarity: c.rarity || '',
+        image: c.images.small,
+        tcg: 'poke'
+      }));
+    } else if (currentTCG === 'ygo') {
+      const r = await fetch(`https://db.ygoprodeck.com/api/v7/cardinfo.php?fname=${encodeURIComponent(q)}&num=18&offset=0`);
+      const d = await r.json();
+      if (d.error) throw new Error(d.error);
+      cards = (d.data || []).slice(0, 18).map(c => ({
+        id: String(c.id),
+        name: c.name,
+        set: c.card_sets ? c.card_sets[0].set_name : 'Unknown',
+        type: c.type,
+        rarity: c.card_sets ? c.card_sets[0].set_rarity : '',
+        image: c.card_images[0].image_url_small,
+        tcg: 'ygo'
+      }));
+    }
+
+    if (!cards.length) { container.innerHTML = '<p style="color:var(--text-muted);padding:12px;">No cards found.</p>'; return; }
+    container.innerHTML = '';
+    cards.forEach(card => {
+      const el = document.createElement('div');
+      el.className = 'result-card';
+      el.innerHTML = `
+        <img src="${card.image || ''}" alt="${card.name}" onerror="this.src='data:image/svg+xml,<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'100\' height=\'140\'><rect width=\'100\' height=\'140\' fill=\'%23333\'/><text x=\'50\' y=\'70\' text-anchor=\'middle\' fill=\'%23888\' font-size=\'10\'>No Image</text></svg>'">
+        <div class="rc-name">${card.name}</div>
+        <div class="rc-set">${card.set}</div>
+      `;
+      el.onclick = () => addToInventory(card);
+      container.appendChild(el);
+    });
+  } catch(e) {
+    container.innerHTML = `<p style="color:var(--danger);padding:12px;">Error: ${e.message}</p>`;
+  }
+}
+
+// ── Add to Inventory ──
+function addToInventory(card) {
+  const existing = inventory.find(c => c.id === card.id);
+  if (existing) {
+    existing.qty = (existing.qty || 1) + 1;
+    notify(`+1 ${card.name} (now x${existing.qty})`);
+  } else {
+    inventory.unshift({ ...card, qty: 1, addedAt: new Date().toISOString() });
+    notify(`Added ${card.name} to inventory!`);
+  }
+  save();
+  renderInventory();
+}
+
+// ── Change Qty ──
+function changeQty(id, delta, e) {
+  e.stopPropagation();
+  const card = inventory.find(c => c.id === id);
+  if (!card) return;
+  card.qty = Math.max(0, (card.qty || 1) + delta);
+  if (card.qty === 0) {
+    inventory = inventory.filter(c => c.id !== id);
+    notify(`Removed ${card.name} from inventory.`);
+  }
+  save();
+  renderInventory();
+}
+
+// ── Render Inventory ──
+function renderInventory() {
+  const nameF = document.getElementById('filterName').value.toLowerCase();
+  const tcgF  = document.getElementById('filterTCG').value;
+  const setF  = document.getElementById('filterSet').value;
+  const grid  = document.getElementById('inventory');
+
+  // Populate set filter
+  const sets = [...new Set(inventory.map(c => c.set).filter(Boolean))].sort();
+  const setSelect = document.getElementById('filterSet');
+  const currentSet = setSelect.value;
+  setSelect.innerHTML = '<option value="">All Sets</option>';
+  sets.forEach(s => {
+    const o = document.createElement('option');
+    o.value = s; o.textContent = s;
+    if (s === currentSet) o.selected = true;
+    setSelect.appendChild(o);
+  });
+
+  const filtered = inventory.filter(c => {
+    const matchName = !nameF || c.name.toLowerCase().includes(nameF);
+    const matchTCG  = !tcgF  || c.tcg === tcgF;
+    const matchSet  = !setF  || c.set === setF;
+    return matchName && matchTCG && matchSet;
+  });
+
+  const total  = filtered.reduce((a, c) => a + (c.qty || 1), 0);
+  const unique = filtered.length;
+  document.getElementById('invCount').textContent = `${total} card${total!==1?'s':''} · ${unique} unique`;
+
+  if (!filtered.length) {
+    grid.innerHTML = `
+      <div class="empty-state">
+        <div class="empty-icon">📭</div>
+        <h3>${inventory.length ? 'No cards match your filter.' : 'Your vault is empty!'}</h3>
+        <p>${inventory.length ? 'Try adjusting the filters above.' : 'Search for a card above to add it to your catalogue.'}</p>
+      </div>`;
+    return;
+  }
+
+  grid.innerHTML = '';
+  filtered.forEach(card => {
+    const el = document.createElement('div');
+    el.className = `inv-card ${card.tcg}`;
+    el.onclick = () => openModal(card.id);
+    el.innerHTML = `
+      <span class="qty-badge">x${card.qty || 1}</span>
+      <span class="tcg-badge ${card.tcg}">${card.tcg === 'mtg' ? 'MTG' : card.tcg === 'poke' ? 'PKM' : 'YGO'}</span>
+      <img src="${card.image || ''}" alt="${card.name}" onerror="this.src='data:image/svg+xml,<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'200\' height=\'280\'><rect width=\'200\' height=\'280\' fill=\'%23333\'/><text x=\'100\' y=\'140\' text-anchor=\'middle\' fill=\'%23888\' font-size=\'14\'>No Image</text></svg>'">
+      <div class="inv-card-body">
+        <div class="inv-card-name">${card.name}</div>
+        <div class="inv-card-set">${card.set || 'Unknown Set'}</div>
+        <div class="qty-row">
+          <button class="qty-btn" onclick="changeQty('${card.id}',-1,event)">−</button>
+          <span class="qty-num">${card.qty || 1}</span>
+          <button class="qty-btn" onclick="changeQty('${card.id}',1,event)">+</button>
+        </div>
+      </div>`;
+    grid.appendChild(el);
+  });
+}
+
+// ── Modal ──
+function openModal(id) {
+  const card = inventory.find(c => c.id === id);
+  if (!card) return;
+  modalCardId = id;
+  document.getElementById('modalTitle').textContent = card.name;
+  document.getElementById('modalImg').src = card.image || '';
+  document.getElementById('modalInfo').innerHTML = `
+    <div class="modal-row"><span class="modal-label">TCG</span><span class="modal-value">${card.tcg === 'mtg' ? 'Magic: The Gathering' : card.tcg === 'poke' ? 'Pokémon' : 'Yu-Gi-Oh!'}</span></div>
+    <div class="modal-row"><span class="modal-label">Set</span><span class="modal-value">${card.set || '—'}</span></div>
+    <div class="modal-row"><span class="modal-label">Type</span><span class="modal-value">${card.type || '—'}</span></div>
+    <div class="modal-row"><span class="modal-label">Rarity</span><span class="modal-value">${card.rarity || '—'}</span></div>
+    <div class="modal-row"><span class="modal-label">Quantity</span><span class="modal-value">${card.qty || 1}</span></div>
+    <div class="modal-row"><span class="modal-label">Added</span><span class="modal-value">${card.addedAt ? new Date(card.addedAt).toLocaleDateString() : '—'}</span></div>
+  `;
+  document.getElementById('modalOverlay').style.display = 'flex';
+}
+function closeModal(e) { if (e.target === document.getElementById('modalOverlay')) closeModalDirect(); }
+function closeModalDirect() { document.getElementById('modalOverlay').style.display = 'none'; modalCardId = null; }
+function deleteCard() {
+  const card = inventory.find(c => c.id === modalCardId);
+  if (card) { inventory = inventory.filter(c => c.id !== modalCardId); save(); renderInventory(); notify(`Removed ${card.name}.`); }
+  closeModalDirect();
+}
+
+// ── Export CSV ──
+function exportCSV() {
+  if (!inventory.length) return notify('Inventory is empty!', 'error');
+  const headers = ['Name','TCG','Set','Type','Rarity','Quantity','Added Date'];
+  const rows = inventory.map(c => [
+    `"${(c.name||'').replace(/"/g,'""')}"`,
+    c.tcg === 'mtg' ? 'Magic: The Gathering' : c.tcg === 'poke' ? 'Pokémon' : 'Yu-Gi-Oh!',
+    `"${(c.set||'').replace(/"/g,'""')}"`,
+    `"${(c.type||'').replace(/"/g,'""')}"`,
+    `"${(c.rarity||'').replace(/"/g,'""')}"`,
+    c.qty || 1,
+    c.addedAt ? new Date(c.addedAt).toLocaleDateString() : ''
+  ].join(','));
+  const csv = [headers.join(','), ...rows].join('\n');
+  const a = document.createElement('a');
+  a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv);
+  a.download = 'cardvault_inventory.csv';
+  a.click();
+  notify('Inventory exported!');
+}
+
+// ── Import CSV ──
+function importCSV(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const lines = e.target.result.split('\n').filter(l => l.trim());
+    if (lines.length < 2) return notify('CSV appears empty.', 'error');
+    let imported = 0;
+    lines.slice(1).forEach(line => {
+      const cols = line.match(/(".*?"|[^,]+)(?=,|$)/g);
+      if (!cols || cols.length < 6) return;
+      const clean = s => s.replace(/^"|"$/g,'').replace(/""/g,'"').trim();
+      const name   = clean(cols[0]);
+      const tcgRaw = clean(cols[1]);
+      const set    = clean(cols[2]);
+      const type   = clean(cols[3]);
+      const rarity = clean(cols[4]);
+      const qty    = parseInt(clean(cols[5])) || 1;
+      const tcg    = tcgRaw.includes('Magic') ? 'mtg' : tcgRaw.includes('ok') ? 'poke' : 'ygo';
+      const id     = `import_${name}_${set}_${Date.now()}_${Math.random()}`;
+      inventory.push({ id, name, tcg, set, type, rarity, qty, image: '', addedAt: new Date().toISOString() });
+      imported++;
+    });
+    save(); renderInventory();
+    notify(`Imported ${imported} card(s)!`);
+  };
+  reader.readAsText(file);
+  event.target.value = '';
+}
+
+// ── Theme Toggle ──
+function toggleTheme() {
+  const html = document.documentElement;
+  const isLight = html.getAttribute('data-theme') === 'light';
+  html.setAttribute('data-theme', isLight ? 'dark' : 'light');
+  document.getElementById('themeBtn').textContent = isLight ? '☀ Light' : '🌙 Dark';
+  localStorage.setItem('cardvault_theme', isLight ? 'dark' : 'light');
+}
+(function initTheme() {
+  const saved = localStorage.getItem('cardvault_theme') || 'dark';
+  document.documentElement.setAttribute('data-theme', saved);
+  document.addEventListener('DOMContentLoaded', () => {
+    const btn = document.getElementById('themeBtn');
+    if (btn) btn.textContent = saved === 'light' ? '🌙 Dark' : '☀ Light';
+  });
+})();
+
+// ── Webcam ──
+async function toggleWebcam() {
+  const container = document.getElementById('webcamContainer');
+  if (container.classList.contains('active')) { stopWebcam(); return; }
+  try {
+    webcamStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+    document.getElementById('webcamVideo').srcObject = webcamStream;
+    container.classList.add('active');
+  } catch(e) {
+    notify('Camera access denied or unavailable.', 'error');
+  }
+}
+function stopWebcam() {
+  if (webcamStream) webcamStream.getTracks().forEach(t => t.stop());
+  webcamStream = null;
+  document.getElementById('webcamContainer').classList.remove('active');
+}
+function captureFrame() {
+  const video = document.getElementById('webcamVideo');
+  const canvas = document.getElementById('capturedCanvas');
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  canvas.getContext('2d').drawImage(video, 0, 0);
+  notify('Frame captured! Now search for the card name above.');
+}
+
+// ── Image Upload ──
+function handleImageUpload(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  notify('Image loaded! Type the card name above and search to identify it.');
+  event.target.value = '';
+}
+
+// ── Init ──
+renderInventory();
+</script>
+</body>
+</html>
