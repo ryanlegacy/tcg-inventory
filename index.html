@@ -504,8 +504,11 @@ const firebaseConfig = {
   appId: "1:757353968209:web:3f3abaf25d4bdddece3e70",
   measurementId: "G-HQXBDYKFV1"
 };
-};
 const fbReady = firebaseConfig.apiKey !== "YOUR_API_KEY";
+if (fbReady) {
+  const b = document.getElementById('fbBanner');
+  if (b) b.classList.add('hidden');
+}
 
 let auth, db;
 try {
