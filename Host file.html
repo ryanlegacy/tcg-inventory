@@ -1,0 +1,970 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>CardVault – TCG Inventory</title>
+
+<!-- Firebase v10 Compat SDKs -->
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+
+<style>
+/* ─── Reset & Variables ─── */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0f1117;--surface:#1a1d27;--surface2:#22263a;--border:#2e3250;
+  --text:#e8eaf6;--text-muted:#8b90b8;--accent:#7c6fe0;--accent-h:#9d92f5;
+  --mtg:#4da6ff;--poke:#f5c842;--ygo:#b06aff;
+  --danger:#ff5c77;--success:#3ddc97;--warn:#f5a623;
+  --radius:12px;--shadow:0 4px 24px rgba(0,0,0,.45);--tr:.22s ease;
+}
+[data-theme="light"]{
+  --bg:#f0f2fc;--surface:#fff;--surface2:#e8eaf6;--border:#c5cadf;
+  --text:#1a1d27;--text-muted:#5a6080;--shadow:0 4px 24px rgba(0,0,0,.12);
+}
+body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;min-height:100vh;transition:background var(--tr),color var(--tr)}
+::-webkit-scrollbar{width:5px}::-webkit-scrollbar-track{background:var(--bg)}::-webkit-scrollbar-thumb{background:var(--border);border-radius:99px}
+
+/* ─── Firebase Banner ─── */
+#fbBanner{
+  background:linear-gradient(90deg,rgba(245,166,35,.15),rgba(245,166,35,.05));
+  border-bottom:1px solid var(--warn);
+  color:var(--warn);
+  padding:10px 20px;
+  font-size:.84rem;
+  font-weight:600;
+  display:flex;
+  align-items:center;
+  gap:10px;
+}
+#fbBanner a{color:var(--warn);text-decoration:underline}
+#fbBanner button{margin-left:auto;background:none;border:none;color:var(--warn);font-size:1.2rem;cursor:pointer;line-height:1}
+#fbBanner.hidden{display:none}
+
+/* ─── Auth Screen ─── */
+#authScreen{
+  display:flex;align-items:center;justify-content:center;
+  min-height:100vh;padding:20px;
+}
+.auth-card{
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:20px;padding:40px 36px;width:100%;max-width:420px;
+  box-shadow:var(--shadow);animation:slideUp .3s ease;
+}
+.auth-logo{text-align:center;margin-bottom:28px}
+.auth-logo .logo-icon{font-size:3rem;display:block}
+.auth-logo h1{font-size:1.8rem;font-weight:900;background:linear-gradient(135deg,var(--accent),#e040fb);-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-top:6px}
+.auth-logo p{color:var(--text-muted);font-size:.9rem;margin-top:4px}
+.auth-tabs{display:flex;gap:0;margin-bottom:24px;background:var(--surface2);border-radius:10px;padding:4px}
+.auth-tab{flex:1;padding:9px;border:none;border-radius:8px;background:transparent;color:var(--text-muted);font-weight:700;cursor:pointer;font-size:.9rem;transition:all var(--tr)}
+.auth-tab.active{background:var(--accent);color:#fff}
+.auth-field{margin-bottom:16px}
+.auth-field label{display:block;font-size:.82rem;font-weight:600;color:var(--text-muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px}
+.auth-input{
+  width:100%;background:var(--surface2);border:1px solid var(--border);
+  border-radius:9px;color:var(--text);padding:11px 14px;font-size:.95rem;outline:none;
+  transition:border-color var(--tr);
+}
+.auth-input:focus{border-color:var(--accent)}
+.auth-input::placeholder{color:var(--text-muted)}
+.btn-auth{
+  width:100%;padding:13px;border:none;border-radius:9px;background:var(--accent);
+  color:#fff;font-weight:800;font-size:1rem;cursor:pointer;transition:all var(--tr);margin-bottom:12px;
+}
+.btn-auth:hover{background:var(--accent-h);transform:translateY(-1px)}
+.divider{display:flex;align-items:center;gap:10px;margin:8px 0;color:var(--text-muted);font-size:.82rem}
+.divider::before,.divider::after{content:'';flex:1;height:1px;background:var(--border)}
+.btn-google{
+  width:100%;padding:12px;border:1px solid var(--border);border-radius:9px;
+  background:var(--surface2);color:var(--text);font-weight:700;font-size:.9rem;
+  cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px;
+  transition:all var(--tr);
+}
+.btn-google:hover{border-color:var(--accent);background:var(--surface)}
+.btn-google svg{width:20px;height:20px;flex-shrink:0}
+.auth-guest{text-align:center;margin-top:16px;font-size:.84rem;color:var(--text-muted)}
+.auth-guest a{color:var(--accent);cursor:pointer;font-weight:600;text-decoration:none}
+.auth-guest a:hover{text-decoration:underline}
+.auth-error{background:rgba(255,92,119,.12);border:1px solid var(--danger);color:var(--danger);border-radius:8px;padding:10px 14px;font-size:.85rem;margin-bottom:14px;display:none}
+.auth-error.show{display:block}
+
+/* ─── App (hidden until auth) ─── */
+#app{display:none}
+
+/* ─── Header ─── */
+header{
+  background:var(--surface);border-bottom:1px solid var(--border);
+  padding:0 22px;height:62px;display:flex;align-items:center;
+  justify-content:space-between;position:sticky;top:0;z-index:100;box-shadow:var(--shadow);
+}
+.logo{display:flex;align-items:center;gap:9px;font-size:1.35rem;font-weight:900;letter-spacing:-.5px}
+.logo-icon{font-size:1.7rem}
+.logo span{background:linear-gradient(135deg,var(--accent),#e040fb);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.header-right{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.icon-btn{
+  background:var(--surface2);border:1px solid var(--border);color:var(--text);
+  border-radius:8px;padding:7px 13px;cursor:pointer;font-size:.82rem;
+  display:flex;align-items:center;gap:5px;transition:all var(--tr);white-space:nowrap;
+}
+.icon-btn:hover{background:var(--accent);border-color:var(--accent);color:#fff}
+.user-chip{
+  display:flex;align-items:center;gap:8px;background:var(--surface2);
+  border:1px solid var(--border);border-radius:99px;padding:5px 14px 5px 5px;
+}
+.user-avatar{
+  width:30px;height:30px;border-radius:50%;background:var(--accent);
+  color:#fff;font-weight:800;font-size:.85rem;display:flex;align-items:center;justify-content:center;
+  flex-shrink:0;
+}
+.user-email{font-size:.8rem;font-weight:600;color:var(--text-muted);max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.btn-logout{background:none;border:none;color:var(--danger);cursor:pointer;font-size:.78rem;font-weight:700;padding:2px 0;transition:opacity var(--tr)}
+.btn-logout:hover{opacity:.7}
+
+/* ─── Sync Banner ─── */
+#syncBanner{
+  background:rgba(124,111,224,.08);border-bottom:1px solid var(--accent);
+  padding:9px 20px;font-size:.84rem;display:flex;align-items:center;gap:10px;
+}
+#syncBanner a{color:var(--accent);font-weight:700;cursor:pointer;text-decoration:underline}
+#syncBanner.hidden{display:none}
+
+/* ─── Main ─── */
+main{max-width:1400px;margin:0 auto;padding:24px 18px}
+
+/* ─── Add Panel ─── */
+.add-panel{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:22px;margin-bottom:24px;box-shadow:var(--shadow)}
+.panel-title{font-size:.8rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:14px}
+.tcg-tabs{display:flex;gap:7px;margin-bottom:16px;flex-wrap:wrap}
+.tcg-tab{padding:7px 18px;border-radius:99px;border:2px solid var(--border);background:transparent;color:var(--text-muted);cursor:pointer;font-weight:700;font-size:.87rem;transition:all var(--tr)}
+.tcg-tab[data-tcg="mtg"].active{border-color:var(--mtg);background:rgba(77,166,255,.13);color:var(--mtg)}
+.tcg-tab[data-tcg="poke"].active{border-color:var(--poke);background:rgba(245,200,66,.13);color:var(--poke)}
+.tcg-tab[data-tcg="ygo"].active{border-color:var(--ygo);background:rgba(176,106,255,.13);color:var(--ygo)}
+.tcg-tab:not(.active):hover{border-color:var(--accent);color:var(--text)}
+.search-row{display:flex;gap:9px;flex-wrap:wrap}
+.search-input{flex:1;min-width:200px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:10px 13px;font-size:.93rem;outline:none;transition:border-color var(--tr)}
+.search-input:focus{border-color:var(--accent)}
+.search-input::placeholder{color:var(--text-muted)}
+.btn{padding:10px 20px;border-radius:8px;border:none;cursor:pointer;font-weight:700;font-size:.88rem;display:flex;align-items:center;gap:5px;transition:all var(--tr);white-space:nowrap}
+.btn-primary{background:var(--accent);color:#fff}
+.btn-primary:hover{background:var(--accent-h);transform:translateY(-1px)}
+.btn-secondary{background:var(--surface2);color:var(--text);border:1px solid var(--border)}
+.btn-secondary:hover{border-color:var(--accent);color:var(--accent)}
+.btn-scan{background:linear-gradient(135deg,#e040fb,var(--accent));color:#fff}
+.btn-scan:hover{opacity:.88;transform:translateY(-1px)}
+
+/* ─── Search Results ─── */
+#searchResults{margin-top:14px;display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px;max-height:320px;overflow-y:auto}
+.result-card{background:var(--surface2);border:2px solid var(--border);border-radius:9px;padding:9px;cursor:pointer;text-align:center;transition:all var(--tr);animation:fadeIn .2s ease}
+.result-card:hover{border-color:var(--accent);transform:translateY(-3px);box-shadow:0 8px 20px rgba(124,111,224,.28)}
+.result-card img{width:100%;border-radius:5px;aspect-ratio:2.5/3.5;object-fit:cover;background:var(--border)}
+.result-card .rc-name{font-size:.72rem;font-weight:700;margin-top:5px;line-height:1.3;word-break:break-word}
+.result-card .rc-set{font-size:.65rem;color:var(--text-muted);margin-top:2px}
+
+/* ─── Filters ─── */
+.filters-bar{display:flex;gap:9px;margin-bottom:18px;flex-wrap:wrap;align-items:center}
+.filter-input{flex:1;min-width:160px;background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:9px 13px;font-size:.88rem;outline:none;transition:border-color var(--tr)}
+.filter-input:focus{border-color:var(--accent)}
+.filter-input::placeholder{color:var(--text-muted)}
+select.filter-input option{background:var(--surface)}
+.inv-count{margin-left:auto;color:var(--text-muted);font-size:.82rem;white-space:nowrap}
+
+/* ─── Inventory Grid ─── */
+#inventory{display:grid;grid-template-columns:repeat(auto-fill,minmax(162px,1fr));gap:14px}
+.inv-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;cursor:pointer;transition:all var(--tr);animation:fadeIn .25s ease;position:relative}
+.inv-card:hover{transform:translateY(-4px);box-shadow:var(--shadow);border-color:var(--accent)}
+.inv-card.mtg{border-top:3px solid var(--mtg)}
+.inv-card.poke{border-top:3px solid var(--poke)}
+.inv-card.ygo{border-top:3px solid var(--ygo)}
+.inv-card img{width:100%;aspect-ratio:2.5/3.5;object-fit:cover;display:block;background:var(--surface2)}
+.inv-card-body{padding:9px}
+.inv-card-name{font-weight:700;font-size:.8rem;line-height:1.3;margin-bottom:2px;word-break:break-word}
+.inv-card-set{font-size:.7rem;color:var(--text-muted);margin-bottom:7px}
+.qty-row{display:flex;align-items:center;gap:5px}
+.qty-btn{width:25px;height:25px;border-radius:50%;border:1px solid var(--border);background:var(--surface2);color:var(--text);cursor:pointer;font-size:.95rem;display:flex;align-items:center;justify-content:center;transition:all var(--tr);flex-shrink:0}
+.qty-btn:hover{background:var(--accent);border-color:var(--accent);color:#fff}
+.qty-num{font-weight:800;font-size:.92rem;flex:1;text-align:center}
+.qty-badge{position:absolute;top:7px;right:7px;background:var(--accent);color:#fff;font-weight:800;font-size:.75rem;padding:2px 7px;border-radius:99px;min-width:26px;text-align:center}
+.tcg-badge{position:absolute;top:7px;left:7px;font-size:.63rem;font-weight:700;padding:2px 6px;border-radius:99px;text-transform:uppercase}
+.tcg-badge.mtg{background:rgba(77,166,255,.22);color:var(--mtg)}
+.tcg-badge.poke{background:rgba(245,200,66,.22);color:var(--poke)}
+.tcg-badge.ygo{background:rgba(176,106,255,.22);color:var(--ygo)}
+
+/* ─── Empty State ─── */
+.empty-state{grid-column:1/-1;text-align:center;padding:55px 20px;color:var(--text-muted)}
+.empty-icon{font-size:3.5rem;margin-bottom:10px}
+.empty-state h3{font-size:1.1rem;margin-bottom:6px;color:var(--text)}
+.empty-state p{font-size:.88rem}
+
+/* ─── Modals ─── */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.72);display:flex;align-items:center;justify-content:center;z-index:200;backdrop-filter:blur(4px);animation:fadeIn .2s ease}
+.modal{background:var(--surface);border:1px solid var(--border);border-radius:16px;width:92%;max-width:500px;max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.5);animation:slideUp .25s ease}
+.modal-lg{max-width:680px}
+.modal-header{display:flex;justify-content:space-between;align-items:center;padding:18px 22px 0}
+.modal-header h3{font-size:1.1rem;font-weight:800}
+.modal-close{background:none;border:none;color:var(--text-muted);font-size:1.4rem;cursor:pointer;line-height:1;padding:0}
+.modal-close:hover{color:var(--danger)}
+.modal-body{padding:18px 22px 22px}
+
+/* ─── Scan Modal ─── */
+.scan-steps{display:flex;gap:0;margin-bottom:20px}
+.scan-step{flex:1;text-align:center;padding:8px 4px;font-size:.75rem;font-weight:700;color:var(--text-muted);border-bottom:2px solid var(--border);transition:all var(--tr);position:relative}
+.scan-step.active{color:var(--accent);border-bottom-color:var(--accent)}
+.scan-step.done{color:var(--success);border-bottom-color:var(--success)}
+.scan-zone{
+  border:2px dashed var(--border);border-radius:12px;padding:30px 20px;
+  text-align:center;cursor:pointer;transition:all var(--tr);margin-bottom:14px;
+}
+.scan-zone:hover,.scan-zone.drag{border-color:var(--accent);background:rgba(124,111,224,.06)}
+.scan-zone .zone-icon{font-size:2.8rem;margin-bottom:8px}
+.scan-zone p{color:var(--text-muted);font-size:.88rem}
+.scan-zone strong{color:var(--accent)}
+#scanPreview{width:100%;max-width:220px;margin:0 auto 14px;display:block;border-radius:10px;border:2px solid var(--border);display:none}
+.scan-tcg-row{display:flex;gap:8px;align-items:center;margin-bottom:14px;flex-wrap:wrap}
+.scan-tcg-row label{font-size:.82rem;font-weight:700;color:var(--text-muted);white-space:nowrap}
+select.scan-select{background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:8px 12px;font-size:.88rem;outline:none;flex:1}
+.scan-name-row{display:flex;gap:8px;margin-bottom:14px}
+.scan-name-row input{flex:1;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:10px 13px;font-size:.9rem;outline:none;transition:border-color var(--tr)}
+.scan-name-row input:focus{border-color:var(--accent)}
+#matchGrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:10px;max-height:300px;overflow-y:auto}
+.match-card{background:var(--surface2);border:2px solid var(--border);border-radius:9px;padding:8px;cursor:pointer;text-align:center;transition:all var(--tr);animation:fadeIn .2s ease}
+.match-card:hover{border-color:var(--success);transform:translateY(-2px);box-shadow:0 6px 18px rgba(61,220,151,.25)}
+.match-card img{width:100%;border-radius:5px;aspect-ratio:2.5/3.5;object-fit:cover;background:var(--border)}
+.match-card .mc-name{font-size:.7rem;font-weight:700;margin-top:5px;line-height:1.3;word-break:break-word}
+.match-card .mc-set{font-size:.63rem;color:var(--text-muted);margin-top:1px}
+.match-card .mc-conf{font-size:.65rem;color:var(--success);font-weight:700;margin-top:2px}
+.scan-hint{color:var(--text-muted);font-size:.82rem;text-align:center;padding:8px;font-style:italic}
+
+/* ─── Webcam ─── */
+#webcamSection{display:none;flex-direction:column;align-items:center;gap:10px;margin-top:10px}
+#webcamSection.active{display:flex}
+#webcamVideo{width:100%;max-width:340px;border-radius:10px;border:2px solid var(--border)}
+#capturedCanvas{display:none}
+
+/* ─── Card Detail Modal ─── */
+.modal-img{width:100%;max-width:220px;margin:0 auto 14px;display:block;border-radius:10px}
+.modal-info{display:grid;gap:6px}
+.modal-row{display:flex;justify-content:space-between;font-size:.86rem;padding:7px 0;border-bottom:1px solid var(--border)}
+.modal-row:last-child{border-bottom:none}
+.modal-label{color:var(--text-muted)}
+.modal-value{font-weight:700}
+.modal-actions{display:flex;gap:9px;margin-top:16px}
+.btn-danger{background:rgba(255,92,119,.13);color:var(--danger);border:1px solid var(--danger)}
+.btn-danger:hover{background:var(--danger);color:#fff}
+
+/* ─── Notification ─── */
+.notif{position:fixed;bottom:22px;right:22px;background:var(--surface);border:1px solid var(--border);border-left:4px solid var(--success);border-radius:10px;padding:13px 18px;font-size:.88rem;font-weight:700;z-index:400;box-shadow:var(--shadow);animation:slideLeft .3s ease;max-width:300px}
+.notif.error{border-left-color:var(--danger)}
+.notif.warn{border-left-color:var(--warn)}
+.notif.info{border-left-color:var(--accent)}
+
+/* ─── Spinner ─── */
+.spinner{width:32px;height:32px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;margin:16px auto}
+
+/* ─── Animations ─── */
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+@keyframes slideUp{from{opacity:0;transform:translateY(28px)}to{opacity:1;transform:translateY(0)}}
+@keyframes slideLeft{from{opacity:0;transform:translateX(38px)}to{opacity:1;transform:translateX(0)}}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ─── Responsive ─── */
+@media(max-width:600px){
+  header{padding:0 10px}
+  main{padding:14px 10px}
+  .logo{font-size:1.1rem}
+  #inventory{grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px}
+  .header-right .icon-btn span{display:none}
+  .user-email{display:none}
+}
+</style>
+</head>
+<body>
+
+<!-- ─── Firebase Setup Banner ─── -->
+<div id="fbBanner">
+  ⚠️ <strong>Firebase Setup Required:</strong> Open this file's source code and replace the placeholder Firebase config with your own project credentials to enable account sync.
+  <a href="https://console.firebase.google.com/" target="_blank">Get credentials →</a>
+  <button onclick="document.getElementById('fbBanner').classList.add('hidden')">✕</button>
+</div>
+
+<!-- ════════════════════════════════ AUTH SCREEN ════════════════════════════════ -->
+<div id="authScreen">
+  <div class="auth-card">
+    <div class="auth-logo">
+      <span class="logo-icon">🃏</span>
+      <h1>CardVault</h1>
+      <p>Your TCG collection, everywhere</p>
+    </div>
+
+    <div class="auth-tabs">
+      <button class="auth-tab active" id="tabLogin"  onclick="showAuthTab('login')">Sign In</button>
+      <button class="auth-tab"        id="tabSignup" onclick="showAuthTab('signup')">Create Account</button>
+    </div>
+
+    <div id="authError" class="auth-error"></div>
+
+    <div id="loginForm">
+      <div class="auth-field"><label>Email</label><input id="loginEmail" class="auth-input" type="email" placeholder="you@example.com" autocomplete="email"/></div>
+      <div class="auth-field"><label>Password</label><input id="loginPass" class="auth-input" type="password" placeholder="••••••••" autocomplete="current-password"/></div>
+      <button class="btn-auth" onclick="doLogin()">Sign In →</button>
+    </div>
+
+    <div id="signupForm" style="display:none">
+      <div class="auth-field"><label>Email</label><input id="signupEmail" class="auth-input" type="email" placeholder="you@example.com" autocomplete="email"/></div>
+      <div class="auth-field"><label>Password</label><input id="signupPass" class="auth-input" type="password" placeholder="Min 6 characters" autocomplete="new-password"/></div>
+      <div class="auth-field"><label>Confirm Password</label><input id="signupPass2" class="auth-input" type="password" placeholder="Repeat password" autocomplete="new-password"/></div>
+      <button class="btn-auth" onclick="doSignup()">Create Account →</button>
+    </div>
+
+    <div class="divider">or</div>
+
+    <button class="btn-google" onclick="doGoogle()">
+      <svg viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/><path fill="none" d="M0 0h48v48H0z"/></svg>
+      Continue with Google
+    </button>
+
+    <p class="auth-guest">Just browsing? <a onclick="useAsGuest()">Continue as Guest</a></p>
+  </div>
+</div>
+
+<!-- ════════════════════════════════ MAIN APP ════════════════════════════════ -->
+<div id="app">
+
+  <!-- Sync banner for guests -->
+  <div id="syncBanner">
+    📱 You're not signed in — inventory is saved locally only.
+    <a onclick="showAuthScreenFromApp()">Sign in to sync across devices →</a>
+    <button onclick="document.getElementById('syncBanner').classList.add('hidden')" style="margin-left:auto;background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:1.1rem">✕</button>
+  </div>
+
+  <!-- HEADER -->
+  <header>
+    <div class="logo"><span class="logo-icon">🃏</span><span>CardVault</span></div>
+    <div class="header-right">
+      <button class="icon-btn" onclick="openScanModal()">📷 <span>Scan Card</span></button>
+      <button class="icon-btn" onclick="exportCSV()">⬇ <span>Export</span></button>
+      <label class="icon-btn" style="cursor:pointer">⬆ <span>Import</span><input type="file" accept=".csv" style="display:none" onchange="importCSV(event)"></label>
+      <button class="icon-btn" onclick="toggleTheme()" id="themeBtn">☀ <span>Light</span></button>
+      <div class="user-chip" id="userChip" style="display:none">
+        <div class="user-avatar" id="userAvatar">?</div>
+        <span class="user-email" id="userEmail"></span>
+        <button class="btn-logout" onclick="doLogout()">Sign out</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- MAIN -->
+  <main>
+
+    <!-- Add Cards Panel -->
+    <div class="add-panel">
+      <div class="panel-title">➕ Add Cards by Search</div>
+      <div class="tcg-tabs">
+        <button class="tcg-tab active" data-tcg="mtg"  onclick="setTCG('mtg',this)">🔵 Magic: The Gathering</button>
+        <button class="tcg-tab"        data-tcg="poke" onclick="setTCG('poke',this)">🟡 Pokémon</button>
+        <button class="tcg-tab"        data-tcg="ygo"  onclick="setTCG('ygo',this)">🟣 Yu-Gi-Oh!</button>
+      </div>
+      <div class="search-row">
+        <input id="cardSearch" class="search-input" type="text" placeholder="Search card by name…" onkeydown="if(event.key==='Enter')searchCards()">
+        <button class="btn btn-primary" onclick="searchCards()">🔍 Search</button>
+        <button class="btn btn-scan"    onclick="openScanModal()">📷 Scan Card</button>
+      </div>
+      <div id="searchResults"></div>
+    </div>
+
+    <!-- Filters -->
+    <div class="filters-bar">
+      <input class="filter-input" type="text" id="filterName" placeholder="🔎 Filter by name…" oninput="renderInventory()">
+      <select class="filter-input" id="filterTCG" onchange="renderInventory()" style="max-width:180px">
+        <option value="">All TCGs</option>
+        <option value="mtg">Magic: The Gathering</option>
+        <option value="poke">Pokémon</option>
+        <option value="ygo">Yu-Gi-Oh!</option>
+      </select>
+      <select class="filter-input" id="filterSet" onchange="renderInventory()" style="max-width:200px">
+        <option value="">All Sets</option>
+      </select>
+      <span class="inv-count" id="invCount">0 cards · 0 unique</span>
+    </div>
+
+    <!-- Inventory Grid -->
+    <div id="inventory"></div>
+
+  </main>
+</div><!-- /#app -->
+
+<!-- ═══════════════════ SCAN MODAL ═══════════════════ -->
+<div id="scanOverlay" class="modal-overlay" style="display:none" onclick="closeScanIfOutside(event)">
+  <div class="modal modal-lg">
+    <div class="modal-header">
+      <h3>📷 Scan a Card</h3>
+      <button class="modal-close" onclick="closeScanModal()">✕</button>
+    </div>
+    <div class="modal-body">
+
+      <!-- Step indicators -->
+      <div class="scan-steps">
+        <div class="scan-step active" id="step1Ind">1 · Capture</div>
+        <div class="scan-step"        id="step2Ind">2 · Identify</div>
+        <div class="scan-step"        id="step3Ind">3 · Select</div>
+      </div>
+
+      <!-- STEP 1: Upload / Webcam -->
+      <div id="scanStep1">
+        <div class="scan-zone" id="dropZone"
+             onclick="document.getElementById('scanFileInput').click()"
+             ondragover="event.preventDefault();this.classList.add('drag')"
+             ondragleave="this.classList.remove('drag')"
+             ondrop="handleDrop(event)">
+          <div class="zone-icon">🖼️</div>
+          <p><strong>Click to upload</strong> or drag & drop a card image</p>
+          <p style="margin-top:5px;font-size:.75rem">JPG, PNG, WEBP — any TCG card</p>
+        </div>
+        <input type="file" id="scanFileInput" accept="image/*" style="display:none" onchange="handleScanFile(event)">
+
+        <div style="text-align:center;margin:10px 0;color:var(--text-muted);font-size:.85rem">— or —</div>
+
+        <div style="text-align:center">
+          <button class="btn btn-secondary" onclick="toggleScanWebcam()">📸 Use Camera</button>
+        </div>
+
+        <div id="webcamSection">
+          <video id="webcamVideo" autoplay playsinline></video>
+          <canvas id="capturedCanvas"></canvas>
+          <div style="display:flex;gap:9px">
+            <button class="btn btn-primary" onclick="captureWebcam()">📷 Capture</button>
+            <button class="btn btn-secondary" onclick="stopScanWebcam()">✖ Stop</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- STEP 2: Identify -->
+      <div id="scanStep2" style="display:none">
+        <img id="scanPreview" src="" alt="Card preview" style="width:100%;max-width:220px;margin:0 auto 14px;display:block;border-radius:10px;border:2px solid var(--border)">
+
+        <div class="scan-tcg-row">
+          <label>Which TCG?</label>
+          <select id="scanTCG" class="scan-select">
+            <option value="mtg">Magic: The Gathering</option>
+            <option value="poke">Pokémon</option>
+            <option value="ygo">Yu-Gi-Oh!</option>
+          </select>
+        </div>
+
+        <div class="scan-name-row">
+          <input id="scanNameHint" type="text" placeholder="Card name (or part of it)…" onkeydown="if(event.key==='Enter')findMatches()">
+          <button class="btn btn-primary" onclick="findMatches()">🔍 Find Matches</button>
+        </div>
+        <p class="scan-hint">💡 Type the card name (or just a few letters) then click <strong>Find Matches</strong> to see options.</p>
+      </div>
+
+      <!-- STEP 3: Select Match -->
+      <div id="scanStep3" style="display:none">
+        <p style="font-size:.85rem;color:var(--text-muted);margin-bottom:12px">👇 Select the correct card to add it to your inventory:</p>
+        <div id="matchGrid"></div>
+        <div style="margin-top:14px;display:flex;gap:9px">
+          <button class="btn btn-secondary" style="flex:1" onclick="goBackToStep2()">← Back</button>
+          <button class="btn btn-secondary" style="flex:1" onclick="resetScanModal()">🔄 Scan Another</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════ CARD DETAIL MODAL ═══════════════════ -->
+<div id="detailOverlay" class="modal-overlay" style="display:none" onclick="if(event.target===this)closeDetail()">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="detailTitle">Card Details</h3>
+      <button class="modal-close" onclick="closeDetail()">✕</button>
+    </div>
+    <div class="modal-body">
+      <img id="detailImg" class="modal-img" src="" alt="">
+      <div class="modal-info" id="detailInfo"></div>
+      <div class="modal-actions">
+        <button class="btn btn-danger" onclick="deleteCard()">🗑 Remove</button>
+        <button class="btn btn-secondary" onclick="closeDetail()">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ══════════════════════════════════════════════════════════════
+//  FIREBASE CONFIG  — replace with your own credentials
+// ══════════════════════════════════════════════════════════════
+const firebaseConfig = {
+  apiKey: "AIzaSyCvMAqw2Ef6z2I_UTLDgG-HrgCO6M3WHuw",
+  authDomain: "tcg-inventory-ff518.firebaseapp.com",
+  projectId: "tcg-inventory-ff518",
+  storageBucket: "tcg-inventory-ff518.firebasestorage.app",
+  messagingSenderId: "757353968209",
+  appId: "1:757353968209:web:3f3abaf25d4bdddece3e70",
+  measurementId: "G-HQXBDYKFV1"
+};
+};
+const fbReady = firebaseConfig.apiKey !== "YOUR_API_KEY";
+
+let auth, db;
+try {
+  firebase.initializeApp(firebaseConfig);
+  auth = firebase.auth();
+  db   = firebase.firestore();
+} catch(e) { console.warn("Firebase init skipped:", e.message); }
+
+// ══════════════════ STATE ══════════════════
+let currentTCG  = 'mtg';
+let inventory   = JSON.parse(localStorage.getItem('cardvault_inv') || '[]');
+let currentUser = null;
+let detailCardId = null;
+let webcamStream = null;
+
+// ══════════════════ AUTH HELPERS ══════════════════
+function showAuthTab(tab) {
+  document.getElementById('loginForm').style.display  = tab==='login'  ? '' : 'none';
+  document.getElementById('signupForm').style.display = tab==='signup' ? '' : 'none';
+  document.getElementById('tabLogin').classList.toggle('active',  tab==='login');
+  document.getElementById('tabSignup').classList.toggle('active', tab==='signup');
+  clearAuthError();
+}
+function authError(msg) {
+  const el = document.getElementById('authError');
+  el.textContent = msg; el.classList.add('show');
+}
+function clearAuthError() { document.getElementById('authError').classList.remove('show'); }
+
+async function doLogin() {
+  if (!fbReady) return authError("Firebase not configured. See the yellow banner.");
+  const email = document.getElementById('loginEmail').value.trim();
+  const pass  = document.getElementById('loginPass').value;
+  if (!email || !pass) return authError("Please fill in all fields.");
+  try { await auth.signInWithEmailAndPassword(email, pass); }
+  catch(e) { authError(friendlyAuthError(e.code)); }
+}
+async function doSignup() {
+  if (!fbReady) return authError("Firebase not configured. See the yellow banner.");
+  const email = document.getElementById('signupEmail').value.trim();
+  const pass  = document.getElementById('signupPass').value;
+  const pass2 = document.getElementById('signupPass2').value;
+  if (!email || !pass || !pass2) return authError("Please fill in all fields.");
+  if (pass !== pass2) return authError("Passwords do not match.");
+  if (pass.length < 6) return authError("Password must be at least 6 characters.");
+  try { await auth.createUserWithEmailAndPassword(email, pass); }
+  catch(e) { authError(friendlyAuthError(e.code)); }
+}
+async function doGoogle() {
+  if (!fbReady) return authError("Firebase not configured. See the yellow banner.");
+  try {
+    const provider = new firebase.auth.GoogleAuthProvider();
+    await auth.signInWithPopup(provider);
+  } catch(e) { authError(friendlyAuthError(e.code)); }
+}
+async function doLogout() {
+  if (auth) await auth.signOut();
+  currentUser = null;
+  showAuthScreen();
+}
+function useAsGuest() {
+  currentUser = null;
+  showApp(null);
+}
+function showAuthScreenFromApp() {
+  document.getElementById('app').style.display='none';
+  document.getElementById('authScreen').style.display='flex';
+}
+function showAuthScreen() {
+  document.getElementById('app').style.display='none';
+  document.getElementById('authScreen').style.display='flex';
+}
+function friendlyAuthError(code) {
+  const map = {
+    'auth/user-not-found':'No account found with that email.',
+    'auth/wrong-password':'Incorrect password.',
+    'auth/email-already-in-use':'That email is already registered.',
+    'auth/invalid-email':'Please enter a valid email address.',
+    'auth/weak-password':'Password must be at least 6 characters.',
+    'auth/popup-closed-by-user':'Sign-in popup was closed.',
+    'auth/network-request-failed':'Network error. Check your connection.',
+  };
+  return map[code] || 'Authentication error. Please try again.';
+}
+
+function showApp(user) {
+  currentUser = user;
+  document.getElementById('authScreen').style.display='none';
+  document.getElementById('app').style.display='block';
+
+  const chip   = document.getElementById('userChip');
+  const banner = document.getElementById('syncBanner');
+  if (user) {
+    chip.style.display='flex';
+    document.getElementById('userAvatar').textContent = (user.displayName||user.email||'?')[0].toUpperCase();
+    document.getElementById('userEmail').textContent  = user.displayName||user.email;
+    banner.classList.add('hidden');
+    loadFromFirestore();
+  } else {
+    chip.style.display='none';
+    banner.classList.remove('hidden');
+    renderInventory();
+  }
+}
+
+// ══════════════════ AUTH STATE LISTENER ══════════════════
+if (auth) {
+  auth.onAuthStateChanged(user => {
+    if (user) showApp(user);
+    // else: stay on auth or guest view
+  });
+}
+
+// ══════════════════ FIRESTORE ══════════════════
+async function saveToFirestore() {
+  if (!currentUser || !db) return;
+  try {
+    await db.collection('users').doc(currentUser.uid)
+      .set({ cards: inventory }, { merge: true });
+  } catch(e) { console.warn("Firestore save error:", e); }
+}
+async function loadFromFirestore() {
+  if (!currentUser || !db) { renderInventory(); return; }
+  try {
+    const doc = await db.collection('users').doc(currentUser.uid).get();
+    if (doc.exists && doc.data().cards) {
+      inventory = doc.data().cards;
+      localStorage.setItem('cardvault_inv', JSON.stringify(inventory));
+    }
+  } catch(e) { console.warn("Firestore load error:", e); }
+  renderInventory();
+}
+
+// ══════════════════ PERSIST ══════════════════
+function save() {
+  localStorage.setItem('cardvault_inv', JSON.stringify(inventory));
+  saveToFirestore();
+}
+
+// ══════════════════ NOTIFY ══════════════════
+function notify(msg, type='success') {
+  const n = document.createElement('div');
+  n.className = 'notif ' + type;
+  n.textContent = msg;
+  document.body.appendChild(n);
+  setTimeout(()=>n.remove(), 3200);
+}
+
+// ══════════════════ TCG SELECTION ══════════════════
+function setTCG(tcg, btn) {
+  currentTCG = tcg;
+  document.querySelectorAll('.tcg-tab').forEach(t=>t.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('searchResults').innerHTML='';
+}
+
+// ══════════════════ SEARCH CARDS ══════════════════
+async function searchCards() {
+  const q = document.getElementById('cardSearch').value.trim();
+  if (!q) return notify('Please enter a card name.','error');
+  const con = document.getElementById('searchResults');
+  con.innerHTML = '<div class="spinner"></div>';
+  try {
+    const cards = await fetchCards(currentTCG, q);
+    if (!cards.length) { con.innerHTML='<p style="color:var(--text-muted);padding:12px">No cards found.</p>'; return; }
+    con.innerHTML='';
+    cards.forEach(card=>{
+      const el=document.createElement('div'); el.className='result-card';
+      el.innerHTML=`<img src="${card.image||''}" alt="${card.name}" onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22100%22 height=%22140%22><rect width=%22100%22 height=%22140%22 fill=%22%23333%22/><text x=%2250%22 y=%2275%22 text-anchor=%22middle%22 fill=%22%23888%22 font-size=%228%22>No Image</text></svg>'">
+      <div class="rc-name">${card.name}</div><div class="rc-set">${card.set}</div>`;
+      el.onclick=()=>addToInventory(card);
+      con.appendChild(el);
+    });
+  } catch(e) { con.innerHTML=`<p style="color:var(--danger);padding:12px">Error: ${e.message}</p>`; }
+}
+
+async function fetchCards(tcg, q, limit=18) {
+  let cards=[];
+  if (tcg==='mtg') {
+    const r=await fetch(`https://api.scryfall.com/cards/search?q=${encodeURIComponent(q)}&unique=cards`);
+    const d=await r.json(); if (!r.ok) throw new Error(d.details||'Not found');
+    cards=(d.data||[]).slice(0,limit).map(c=>({id:c.id,name:c.name,set:c.set_name,type:c.type_line,rarity:c.rarity,image:c.image_uris?c.image_uris.small:(c.card_faces?c.card_faces[0].image_uris.small:''),tcg:'mtg'}));
+  } else if (tcg==='poke') {
+    const r=await fetch(`https://api.pokemontcg.io/v2/cards?q=name:"${encodeURIComponent(q)}"&pageSize=${limit}`);
+    const d=await r.json();
+    cards=(d.data||[]).map(c=>({id:c.id,name:c.name,set:c.set.name,type:c.supertypes?c.supertypes.join(', '):'',rarity:c.rarity||'',image:c.images.small,tcg:'poke'}));
+  } else if (tcg==='ygo') {
+    const r=await fetch(`https://db.ygoprodeck.com/api/v7/cardinfo.php?fname=${encodeURIComponent(q)}&num=${limit}&offset=0`);
+    const d=await r.json(); if (d.error) throw new Error(d.error);
+    cards=(d.data||[]).slice(0,limit).map(c=>({id:String(c.id),name:c.name,set:c.card_sets?c.card_sets[0].set_name:'Unknown',type:c.type,rarity:c.card_sets?c.card_sets[0].set_rarity:'',image:c.card_images[0].image_url_small,tcg:'ygo'}));
+  }
+  return cards;
+}
+
+// ══════════════════ INVENTORY ══════════════════
+function addToInventory(card) {
+  const ex = inventory.find(c=>c.id===card.id);
+  if (ex) { ex.qty=(ex.qty||1)+1; notify(`+1 ${card.name} (now ×${ex.qty})`); }
+  else { inventory.unshift({...card,qty:1,addedAt:new Date().toISOString()}); notify(`Added ${card.name}! ✅`); }
+  save(); renderInventory();
+}
+function changeQty(id,delta,e) {
+  e.stopPropagation();
+  const card=inventory.find(c=>c.id===id); if (!card) return;
+  card.qty=Math.max(0,(card.qty||1)+delta);
+  if (card.qty===0) { inventory=inventory.filter(c=>c.id!==id); notify(`Removed ${card.name}.`,'warn'); }
+  save(); renderInventory();
+}
+function renderInventory() {
+  const nameF=document.getElementById('filterName').value.toLowerCase();
+  const tcgF =document.getElementById('filterTCG').value;
+  const setF =document.getElementById('filterSet').value;
+  const grid =document.getElementById('inventory');
+  const setSelect=document.getElementById('filterSet');
+  const curSet=setSelect.value;
+  const sets=[...new Set(inventory.map(c=>c.set).filter(Boolean))].sort();
+  setSelect.innerHTML='<option value="">All Sets</option>';
+  sets.forEach(s=>{const o=document.createElement('option');o.value=s;o.textContent=s;if(s===curSet)o.selected=true;setSelect.appendChild(o);});
+  const filtered=inventory.filter(c=>
+    (!nameF||c.name.toLowerCase().includes(nameF))&&
+    (!tcgF||c.tcg===tcgF)&&(!setF||c.set===setF)
+  );
+  const total=filtered.reduce((a,c)=>a+(c.qty||1),0);
+  document.getElementById('invCount').textContent=`${total} card${total!==1?'s':''} · ${filtered.length} unique`;
+  if (!filtered.length) {
+    grid.innerHTML=`<div class="empty-state"><div class="empty-icon">${inventory.length?'🔍':'📭'}</div><h3>${inventory.length?'No cards match your filter.':'Your vault is empty!'}</h3><p>${inventory.length?'Try adjusting the filters above.':'Search or scan a card above to get started.'}</p></div>`;
+    return;
+  }
+  grid.innerHTML='';
+  filtered.forEach(card=>{
+    const el=document.createElement('div');
+    el.className=`inv-card ${card.tcg}`;
+    el.onclick=()=>openDetail(card.id);
+    el.innerHTML=`
+      <span class="qty-badge">×${card.qty||1}</span>
+      <span class="tcg-badge ${card.tcg}">${card.tcg==='mtg'?'MTG':card.tcg==='poke'?'PKM':'YGO'}</span>
+      <img src="${card.image||''}" alt="${card.name}" onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22200%22 height=%22280%22><rect width=%22200%22 height=%22280%22 fill=%22%23333%22/><text x=%22100%22 y=%22145%22 text-anchor=%22middle%22 fill=%22%23888%22 font-size=%2212%22>No Image</text></svg>'">
+      <div class="inv-card-body">
+        <div class="inv-card-name">${card.name}</div>
+        <div class="inv-card-set">${card.set||'Unknown set'}</div>
+        <div class="qty-row">
+          <button class="qty-btn" onclick="changeQty('${card.id}',-1,event)">−</button>
+          <span class="qty-num">${card.qty||1}</span>
+          <button class="qty-btn" onclick="changeQty('${card.id}',1,event)">+</button>
+        </div>
+      </div>`;
+    grid.appendChild(el);
+  });
+}
+
+// ══════════════════ DETAIL MODAL ══════════════════
+function openDetail(id) {
+  const card=inventory.find(c=>c.id===id); if (!card) return;
+  detailCardId=id;
+  document.getElementById('detailTitle').textContent=card.name;
+  document.getElementById('detailImg').src=card.image||'';
+  const tcgName=card.tcg==='mtg'?'Magic: The Gathering':card.tcg==='poke'?'Pokémon':'Yu-Gi-Oh!';
+  document.getElementById('detailInfo').innerHTML=`
+    <div class="modal-row"><span class="modal-label">TCG</span><span class="modal-value">${tcgName}</span></div>
+    <div class="modal-row"><span class="modal-label">Set</span><span class="modal-value">${card.set||'—'}</span></div>
+    <div class="modal-row"><span class="modal-label">Type</span><span class="modal-value">${card.type||'—'}</span></div>
+    <div class="modal-row"><span class="modal-label">Rarity</span><span class="modal-value">${card.rarity||'—'}</span></div>
+    <div class="modal-row"><span class="modal-label">Quantity</span><span class="modal-value">${card.qty||1}</span></div>
+    <div class="modal-row"><span class="modal-label">Added</span><span class="modal-value">${card.addedAt?new Date(card.addedAt).toLocaleDateString():'—'}</span></div>`;
+  document.getElementById('detailOverlay').style.display='flex';
+}
+function closeDetail() { document.getElementById('detailOverlay').style.display='none'; detailCardId=null; }
+function deleteCard() {
+  const card=inventory.find(c=>c.id===detailCardId);
+  if (card) { inventory=inventory.filter(c=>c.id!==detailCardId); save(); renderInventory(); notify(`Removed ${card.name}.`,'warn'); }
+  closeDetail();
+}
+
+// ══════════════════ SCAN MODAL ══════════════════
+let scanStep=1;
+function openScanModal() {
+  resetScanModal();
+  document.getElementById('scanTCG').value = currentTCG;
+  document.getElementById('scanOverlay').style.display='flex';
+}
+function closeScanModal() {
+  document.getElementById('scanOverlay').style.display='none';
+  stopScanWebcam();
+}
+function closeScanIfOutside(e) { if(e.target===document.getElementById('scanOverlay')) closeScanModal(); }
+
+function setScanStep(n) {
+  scanStep=n;
+  document.getElementById('scanStep1').style.display = n===1?'':'none';
+  document.getElementById('scanStep2').style.display = n===2?'':'none';
+  document.getElementById('scanStep3').style.display = n===3?'':'none';
+  ['step1Ind','step2Ind','step3Ind'].forEach((id,i)=>{
+    const el=document.getElementById(id);
+    el.classList.remove('active','done');
+    if (i+1===n) el.classList.add('active');
+    else if (i+1<n) el.classList.add('done');
+  });
+}
+function resetScanModal() {
+  setScanStep(1);
+  document.getElementById('scanPreview').style.display='none';
+  document.getElementById('scanNameHint').value='';
+  document.getElementById('matchGrid').innerHTML='';
+  document.getElementById('scanFileInput').value='';
+  stopScanWebcam();
+}
+function goBackToStep2() { setScanStep(2); }
+
+// ── File handling ──
+function handleDrop(e) {
+  e.preventDefault();
+  document.getElementById('dropZone').classList.remove('drag');
+  const file = e.dataTransfer.files[0];
+  if (file && file.type.startsWith('image/')) processScannedFile(file);
+}
+function handleScanFile(e) { const f=e.target.files[0]; if(f) processScannedFile(f); }
+
+function processScannedFile(file) {
+  const reader=new FileReader();
+  reader.onload=ev=>{
+    const preview=document.getElementById('scanPreview');
+    preview.src=ev.target.result;
+    preview.style.display='block';
+    // Auto-fill name hint from filename (strip extension and clean up)
+    const hint=file.name.replace(/\.[^/.]+$/,'').replace(/[-_]/g,' ').replace(/\d+/g,'').trim();
+    document.getElementById('scanNameHint').value=hint;
+    setScanStep(2);
+  };
+  reader.readAsDataURL(file);
+}
+
+// ── Webcam ──
+async function toggleScanWebcam() {
+  const sec=document.getElementById('webcamSection');
+  if (sec.classList.contains('active')) { stopScanWebcam(); return; }
+  try {
+    webcamStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}});
+    document.getElementById('webcamVideo').srcObject=webcamStream;
+    sec.classList.add('active');
+  } catch(e) { notify('Camera access denied.','error'); }
+}
+function captureWebcam() {
+  const video=document.getElementById('webcamVideo');
+  const canvas=document.getElementById('capturedCanvas');
+  canvas.width=video.videoWidth; canvas.height=video.videoHeight;
+  canvas.getContext('2d').drawImage(video,0,0);
+  canvas.toBlob(blob=>{
+    if (!blob) return;
+    const preview=document.getElementById('scanPreview');
+    preview.src=URL.createObjectURL(blob);
+    preview.style.display='block';
+    stopScanWebcam();
+    setScanStep(2);
+  },'image/jpeg',0.9);
+}
+function stopScanWebcam() {
+  if (webcamStream) webcamStream.getTracks().forEach(t=>t.stop());
+  webcamStream=null;
+  const sec=document.getElementById('webcamSection');
+  if (sec) sec.classList.remove('active');
+}
+
+// ── Find Matches ──
+async function findMatches() {
+  const q   = document.getElementById('scanNameHint').value.trim();
+  const tcg = document.getElementById('scanTCG').value;
+  if (!q) return notify('Please enter a card name or hint.','error');
+  setScanStep(3);
+  const grid=document.getElementById('matchGrid');
+  grid.innerHTML='<div class="spinner"></div>';
+  try {
+    const cards=await fetchCards(tcg, q, 20);
+    if (!cards.length) {
+      grid.innerHTML='<p style="color:var(--text-muted);padding:12px;grid-column:1/-1">No matches found. Try a different name.</p>';
+      return;
+    }
+    grid.innerHTML='';
+    cards.forEach(card=>{
+      const el=document.createElement('div'); el.className='match-card';
+      el.innerHTML=`
+        <img src="${card.image||''}" alt="${card.name}" onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22100%22 height=%22140%22><rect width=%22100%22 height=%22140%22 fill=%22%23333%22/><text x=%2250%22 y=%2275%22 text-anchor=%22middle%22 fill=%22%23888%22 font-size=%228%22>No Image</text></svg>'">
+        <div class="mc-name">${card.name}</div>
+        <div class="mc-set">${card.set}</div>`;
+      el.onclick=()=>selectMatchCard(card);
+      grid.appendChild(el);
+    });
+  } catch(e) {
+    grid.innerHTML=`<p style="color:var(--danger);padding:12px;grid-column:1/-1">Error: ${e.message}</p>`;
+  }
+}
+
+function selectMatchCard(card) {
+  addToInventory(card);
+  // Highlight selected then reset for next scan
+  setTimeout(()=>{ resetScanModal(); notify(`${card.name} added! Scan another card.`,'info'); }, 400);
+}
+
+// ══════════════════ EXPORT / IMPORT ══════════════════
+function exportCSV() {
+  if (!inventory.length) return notify('Inventory is empty!','error');
+  const headers=['Name','TCG','Set','Type','Rarity','Quantity','Added Date'];
+  const rows=inventory.map(c=>[
+    `"${(c.name||'').replace(/"/g,'""')}"`,
+    c.tcg==='mtg'?'Magic: The Gathering':c.tcg==='poke'?'Pokémon':'Yu-Gi-Oh!',
+    `"${(c.set||'').replace(/"/g,'""')}"`,
+    `"${(c.type||'').replace(/"/g,'""')}"`,
+    `"${(c.rarity||'').replace(/"/g,'""')}"`,
+    c.qty||1,
+    c.addedAt?new Date(c.addedAt).toLocaleDateString():''
+  ].join(','));
+  const csv=[headers.join(','),...rows].join('\n');
+  const a=document.createElement('a');
+  a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);
+  a.download='cardvault_inventory.csv'; a.click();
+  notify('Inventory exported! 📥');
+}
+function importCSV(event) {
+  const file=event.target.files[0]; if (!file) return;
+  const reader=new FileReader();
+  reader.onload=e=>{
+    const lines=e.target.result.split('\n').filter(l=>l.trim());
+    if (lines.length<2) return notify('CSV appears empty.','error');
+    let imported=0;
+    lines.slice(1).forEach(line=>{
+      const cols=line.match(/"[^"]*"|[^,]+/g); if (!cols||cols.length<6) return;
+      const clean=s=>s.replace(/^"|"$/g,'').replace(/""/g,'"').trim();
+      const name=clean(cols[0]),tcgRaw=clean(cols[1]),set=clean(cols[2]),type=clean(cols[3]),rarity=clean(cols[4]);
+      const qty=parseInt(clean(cols[5]))||1;
+      const tcg=tcgRaw.includes('Magic')?'mtg':tcgRaw.toLowerCase().includes('ok')?'poke':'ygo';
+      const id=`import_${name}_${set}_${Date.now()}_${Math.random()}`;
+      inventory.push({id,name,tcg,set,type,rarity,qty,image:'',addedAt:new Date().toISOString()});
+      imported++;
+    });
+    save(); renderInventory(); notify(`Imported ${imported} card(s)!`);
+  };
+  reader.readAsText(file);
+  event.target.value='';
+}
+
+// ══════════════════ THEME ══════════════════
+function toggleTheme() {
+  const html=document.documentElement;
+  const isLight=html.getAttribute('data-theme')==='light';
+  html.setAttribute('data-theme',isLight?'dark':'light');
+  const btn=document.getElementById('themeBtn');
+  btn.innerHTML=isLight?'☀ <span>Light</span>':'🌙 <span>Dark</span>';
+  localStorage.setItem('cardvault_theme',isLight?'dark':'light');
+}
+(function initTheme(){
+  const saved=localStorage.getItem('cardvault_theme')||'dark';
+  document.documentElement.setAttribute('data-theme',saved);
+  document.addEventListener('DOMContentLoaded',()=>{
+    const btn=document.getElementById('themeBtn');
+    if (btn) btn.innerHTML=saved==='light'?'🌙 <span>Dark</span>':'☀ <span>Light</span>';
+  });
+})();
+
+// ══════════════════ INIT ══════════════════
+renderInventory();
+</script>
+</body>
+</html>
